@@ -28,10 +28,7 @@ export default async function SchedulePage() {
 
     const employeeIds = employees.map((e) => e.id);
 
-    const [allSchedules, allIrregularSchedules, allTimeOffs] = await Promise.all([
-        prisma.schedule.findMany({
-            where: { employeeId: { in: employeeIds } },
-        }),
+    const [allIrregularSchedules, allTimeOffs, allAppointments] = await Promise.all([
         prisma.irregularSchedule.findMany({
             where: { employeeId: { in: employeeIds } },
         }),
@@ -39,14 +36,24 @@ export default async function SchedulePage() {
             where: { employeeId: { in: employeeIds } },
             orderBy: { date: "asc" },
         }),
+        prisma.appointment.findMany({
+            where: {
+                employeeId: { in: employeeIds },
+                status: { in: ["CONFIRMED", "PENDING"] },
+            },
+        }),
     ]);
 
-    // Group regular schedules by employeeId
-    const schedulesByEmployee = allSchedules.reduce((acc, schedule) => {
-        if (!acc[schedule.employeeId]) acc[schedule.employeeId] = [];
-        acc[schedule.employeeId].push(schedule);
+    // Group appointments by employeeId
+    const appointmentsByEmployee = allAppointments.reduce((acc, app) => {
+        if (!acc[app.employeeId]) acc[app.employeeId] = [];
+        acc[app.employeeId].push({
+            id: app.id,
+            startTime: app.startTime.toISOString(),
+            endTime: app.endTime.toISOString(),
+        });
         return acc;
-    }, {} as Record<string, typeof allSchedules>);
+    }, {} as Record<string, { id: string; startTime: string; endTime: string }[]>);
 
     // Group irregular schedules by employeeId and serialize dates
     const irregularByEmployee = allIrregularSchedules.reduce((acc, schedule) => {
@@ -101,9 +108,9 @@ export default async function SchedulePage() {
                              <ScheduleForm
                                 employeeId={employee.id}
                                 employeeName={employee.name || "Nepoznato"}
-                                initialSchedule={schedulesByEmployee[employee.id] || []}
                                 initialIrregular={irregularByEmployee[employee.id] || []}
                                 initialTimeOffs={timeOffsByEmployee[employee.id] || []}
+                                appointments={appointmentsByEmployee[employee.id] || []}
                             />
                         </div>
                     ))
